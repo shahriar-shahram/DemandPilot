@@ -139,3 +139,36 @@ if "product_name" in filtered_df.columns:
         .reset_index()
     )
     st.dataframe(top_products, use_container_width=True)
+
+    st.divider()
+    st.subheader("Regional Forecasting")
+
+    forecast_df = pd.read_csv("data/processed/forecast_results_by_region.csv")
+    forecast_df["order_date"] = pd.to_datetime(forecast_df["order_date"])
+
+    metrics_df = pd.read_csv("data/processed/forecast_metrics_by_region.csv")
+
+    # Region selector
+    regions = forecast_df["region"].unique()
+    selected_region = st.selectbox("Select Region", regions)
+
+    region_data = forecast_df[forecast_df["region"] == selected_region]
+
+    region_metrics = metrics_df[metrics_df["region"] == selected_region]
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("MAE", f"{region_metrics['MAE'].values[0]:.2f}")
+    col2.metric("RMSE", f"{region_metrics['RMSE'].values[0]:.2f}")
+    col3.metric("SMAPE", f"{region_metrics['SMAPE'].values[0]:.2f}%")
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(region_data["order_date"], region_data["total_sales"], label="Actual")
+    ax.plot(region_data["order_date"], region_data["prediction"], label="Forecast")
+    ax.set_title(f"{selected_region} Forecast")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Sales")
+    ax.legend()
+    plt.xticks(rotation=45)
+
+    st.pyplot(fig)

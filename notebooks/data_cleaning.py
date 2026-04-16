@@ -40,3 +40,51 @@ print(daily_sales.head())
 
 # Save aggregated data
 daily_sales.to_csv("data/processed/daily_sales.csv", index=False)
+
+# ===============================
+# 🔥 Feature-rich daily dataset
+# ===============================
+
+daily_features = df.groupby("order_date").agg({
+    "sales": "sum",
+    "profit": "sum",
+    "discount": "mean",
+    "order_id": "count",
+    "product_name": "nunique"
+}).reset_index()
+
+daily_features.rename(columns={
+    "sales": "total_sales",
+    "profit": "total_profit",
+    "discount": "avg_discount",
+    "order_id": "num_orders",
+    "product_name": "unique_products"
+}, inplace=True)
+
+daily_features.to_csv("data/processed/daily_features.csv", index=False)
+
+print("\nDaily features preview:")
+print(daily_features.head())
+
+# ===============================
+# 🔥 Region-level daily features
+# ===============================
+
+daily_region = df.groupby(["order_date", "region"]).agg({
+    "sales": "sum",
+    "profit": "sum",
+    "discount": "mean",
+    "order_id": "count"
+}).reset_index()
+
+daily_region.rename(columns={
+    "sales": "total_sales",
+    "profit": "total_profit",
+    "discount": "avg_discount",
+    "order_id": "num_orders"
+}, inplace=True)
+
+daily_region.to_csv("data/processed/daily_region.csv", index=False)
+
+print("\nDaily region data preview:")
+print(daily_region.head())
