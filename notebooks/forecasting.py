@@ -6,11 +6,11 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 # =========================
-# Load region-level dataset
+# Load category-level dataset
 # =========================
-df = pd.read_csv("data/processed/daily_region.csv")
+df = pd.read_csv("data/processed/daily_category.csv")
 df["order_date"] = pd.to_datetime(df["order_date"])
-df = df.sort_values(["region", "order_date"]).reset_index(drop=True)
+df = df.sort_values(["product_category", "order_date"]).reset_index(drop=True)
 
 print("Original shape:", df.shape)
 print(df.head())
@@ -18,53 +18,52 @@ print(df.head())
 all_forecasts = []
 all_metrics = []
 
-regions = sorted(df["region"].dropna().unique())
+categories = sorted(df["product_category"].dropna().unique())
 
-for region in regions:
-    print(f"\nProcessing region: {region}")
+for category in categories:
+    print(f"\nProcessing category: {category}")
 
-    region_df = df[df["region"] == region].copy()
-    region_df = region_df.sort_values("order_date").reset_index(drop=True)
+    cat_df = df[df["product_category"] == category].copy()
+    cat_df = cat_df.sort_values("order_date").reset_index(drop=True)
 
     # -------------------------
     # Lagged target features
     # -------------------------
-    region_df["lag_1"] = region_df["total_sales"].shift(1)
-    region_df["lag_7"] = region_df["total_sales"].shift(7)
-    region_df["lag_14"] = region_df["total_sales"].shift(14)
+    cat_df["lag_1"] = cat_df["total_sales"].shift(1)
+    cat_df["lag_7"] = cat_df["total_sales"].shift(7)
+    cat_df["lag_14"] = cat_df["total_sales"].shift(14)
 
-    region_df["rolling_mean_7"] = region_df["total_sales"].shift(1).rolling(7).mean()
-    region_df["rolling_mean_14"] = region_df["total_sales"].shift(1).rolling(14).mean()
+    cat_df["rolling_mean_7"] = cat_df["total_sales"].shift(1).rolling(7).mean()
+    cat_df["rolling_mean_14"] = cat_df["total_sales"].shift(1).rolling(14).mean()
 
     # -------------------------
     # Lagged exogenous features
     # -------------------------
-    region_df["avg_discount_lag_1"] = region_df["avg_discount"].shift(1)
-    region_df["num_orders_lag_1"] = region_df["num_orders"].shift(1)
-    region_df["total_profit_lag_1"] = region_df["total_profit"].shift(1)
+    cat_df["avg_discount_lag_1"] = cat_df["avg_discount"].shift(1)
+    cat_df["num_orders_lag_1"] = cat_df["num_orders"].shift(1)
+    cat_df["total_profit_lag_1"] = cat_df["total_profit"].shift(1)
 
     # -------------------------
     # Calendar features
     # -------------------------
-    region_df["day_of_week"] = region_df["order_date"].dt.dayofweek
-    region_df["month"] = region_df["order_date"].dt.month
+    cat_df["day_of_week"] = cat_df["order_date"].dt.dayofweek
+    cat_df["month"] = cat_df["order_date"].dt.month
 
     # Drop NaNs from lagging/rolling
-    region_model = region_df.dropna().reset_index(drop=True)
+    cat_model = cat_df.dropna().reset_index(drop=True)
 
-    print(f"Model-ready rows for {region}: {len(region_model)}")
+    print(f"Model-ready rows for {category}: {len(cat_model)}")
 
-    # Skip tiny regions if needed
-    if len(region_model) < 60:
-        print(f"Skipping {region} because it has too few usable rows.")
+    if len(cat_model) < 60:
+        print(f"Skipping {category} because it has too few usable rows.")
         continue
 
     # -------------------------
     # Train/test split
     # -------------------------
-    split_idx = int(len(region_model) * 0.8)
-    train = region_model.iloc[:split_idx].copy()
-    test = region_model.iloc[split_idx:].copy()
+    split_idx = int(len(cat_model) * 0.8)
+    train = cat_model.iloc[:split_idx].copy()
+    test = cat_model.iloc[split_idx:].copy()
 
     feature_cols = [
         "lag_1",
@@ -100,72 +99,77 @@ for region in regions:
     mae = mean_absolute_error(y_test, test["prediction"])
     rmse = np.sqrt(mean_squared_error(y_test, test["prediction"]))
 
-    threshold = 1000  # adjust based on your data
-
+    threshold = 1000
     mask = y_test > threshold
 
-    smape = (
-                    np.abs(test.loc[mask, "prediction"] - y_test[mask]) /
-                    ((np.abs(y_test[mask]) + np.abs(test.loc[mask, "prediction"])) / 2)
-            ).mean() * 100
+    if mask.sum() > 0:
+        smape = (
+            np.abs(test.loc[mask, "prediction"] - y_test[mask]) /
+            ((np.abs(y_test[mask]) + np.abs(test.loc[mask, "prediction"])) / 2)
+        ).mean() * 100
+    else:
+        smape = np.nan
 
-    print(f"{region} -> MAE: {mae:.2f}, RMSE: {rmse:.2f}, SMAPE: {smape:.2f}%")
+    weights = y_test / y_test.sum()
+    weighted_smape = (
+        weights * np.abs(test["prediction"] - y_test) /
+        ((np.abs(y_test) + np.abs(test["prediction"])) / 2)
+    ).sum() * 100
+
+    print(
+        f"{category} -> MAE: {mae:.2f}, RMSE: {rmse:.2f}, "
+        f"SMAPE: {smape:.2f}%, Weighted SMAPE: {weighted_smape:.2f}%"
+    )
 
     all_metrics.append({
-        "region": region,
+        "product_category": category,
         "train_size": len(train),
         "test_size": len(test),
         "MAE": mae,
         "RMSE": rmse,
         "SMAPE": smape,
+        "weighted_SMAPE": weighted_smape,
     })
 
-    weights = y_test / y_test.sum()
-
-    weighted_smape = (
-                             weights * np.abs(test["prediction"] - y_test) /
-                             ((np.abs(y_test) + np.abs(test["prediction"])) / 2)
-                     ).sum() * 100
-
-    print(f"Weighted SMAPE: {weighted_smape:.2f}%")
-
-    forecast_part = test[["order_date", "region", "total_sales", "prediction"]].copy()
+    forecast_part = test[["order_date", "product_category", "total_sales", "prediction"]].copy()
     all_forecasts.append(forecast_part)
 
 # =========================
 # Save combined results
 # =========================
 if not all_forecasts:
-    raise ValueError("No regional forecasts were created. Check your input data.")
+    raise ValueError("No category forecasts were created. Check your input data.")
 
 forecast_df = pd.concat(all_forecasts, ignore_index=True)
 metrics_df = pd.DataFrame(all_metrics)
 
-forecast_df.to_csv("data/processed/forecast_results_by_region.csv", index=False)
-metrics_df.to_csv("data/processed/forecast_metrics_by_region.csv", index=False)
+forecast_df.to_csv("data/processed/forecast_results_by_category.csv", index=False)
+metrics_df.to_csv("data/processed/forecast_metrics_by_category.csv", index=False)
 
-print("\nAverage metrics across regions:")
-print(metrics_df[["MAE", "RMSE", "SMAPE"]].mean())
+print("\nAverage metrics across categories:")
+print(metrics_df[["MAE", "RMSE", "SMAPE", "weighted_SMAPE"]].mean())
 
 # =========================
-# Optional overall plot
+# Save plots
 # =========================
-for region in forecast_df["region"].unique():
-    plot_df = forecast_df[forecast_df["region"] == region].copy()
+for category in forecast_df["product_category"].unique():
+    plot_df = forecast_df[forecast_df["product_category"] == category].copy()
 
     plt.figure(figsize=(10, 4))
     plt.plot(plot_df["order_date"], plot_df["total_sales"], label="Actual")
     plt.plot(plot_df["order_date"], plot_df["prediction"], label="Forecast")
     plt.xlabel("Date")
     plt.ylabel("Sales")
-    plt.title(f"Regional Forecast: {region}")
+    plt.title(f"Category Forecast: {category}")
     plt.legend()
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.savefig(f"data/processed/forecast_plot_{region}.png")
+
+    safe_name = str(category).replace(" ", "_").replace("/", "_")
+    plt.savefig(f"data/processed/forecast_plot_category_{safe_name}.png")
     plt.close()
 
 print("\nSaved:")
-print("- data/processed/forecast_results_by_region.csv")
-print("- data/processed/forecast_metrics_by_region.csv")
-print("- forecast_plot_<region>.png files")
+print("- data/processed/forecast_results_by_category.csv")
+print("- data/processed/forecast_metrics_by_category.csv")
+print("- forecast_plot_category_<category>.png files")

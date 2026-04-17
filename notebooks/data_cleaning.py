@@ -88,3 +88,26 @@ daily_region.to_csv("data/processed/daily_region.csv", index=False)
 
 print("\nDaily region data preview:")
 print(daily_region.head())
+
+# ===============================
+# 🔥 Category-level daily data
+# ===============================
+
+daily_category = df.groupby(["order_date", "product_category"]).agg({
+    "sales": "sum",
+    "profit": "sum",
+    "discount": "mean",
+    "order_id": "count"
+}).reset_index()
+
+daily_category.rename(columns={
+    "sales": "total_sales",
+    "profit": "total_profit",
+    "discount": "avg_discount",
+    "order_id": "num_orders"
+}, inplace=True)
+
+daily_category.to_csv("data/processed/daily_category.csv", index=False)
+
+print("\nDaily category data preview:")
+print(daily_category.head())
