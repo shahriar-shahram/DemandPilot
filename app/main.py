@@ -1,207 +1,438 @@
-import streamlit as st
+import sys
+from pathlib import Path
+
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.express as px
+import streamlit as st
 
-st.set_page_config(page_title="DemandPilot Dashboard", layout="wide")
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT_DIR / "src"))
 
-st.title("DemandPilot Dashboard")
-st.write("Retail sales analytics and demand signal exploration")
+from config import CLEAN_DATA_PATH, MODEL_METRICS_PATH, PREDICTIONS_PATH
+from inference import predict_from_uploaded_csv
 
-# =========================
-# Load data
-# =========================
-df = pd.read_csv("data/processed/clean_data.csv")
-daily_sales = pd.read_csv("data/processed/daily_sales.csv")
 
-df["order_date"] = pd.to_datetime(df["order_date"])
-daily_sales["order_date"] = pd.to_datetime(daily_sales["order_date"])
-
-# =========================
-# Sidebar filters
-# =========================
-st.sidebar.header("Filters")
-
-regions = sorted(df["region"].dropna().unique().tolist()) if "region" in df.columns else []
-categories = sorted(df["product_category"].dropna().unique().tolist()) if "product_category" in df.columns else []
-
-selected_regions = st.sidebar.multiselect("Select Region(s)", regions, default=regions)
-selected_categories = st.sidebar.multiselect("Select Category(s)", categories, default=categories)
-
-filtered_df = df.copy()
-
-if "region" in filtered_df.columns and selected_regions:
-    filtered_df = filtered_df[filtered_df["region"].isin(selected_regions)]
-
-if "product_category" in filtered_df.columns and selected_categories:
-    filtered_df = filtered_df[filtered_df["product_category"].isin(selected_categories)]
-
-# Recompute filtered daily sales
-filtered_daily_sales = (
-    filtered_df.groupby("order_date")["sales"]
-    .sum()
-    .reset_index()
-    .sort_values("order_date")
+st.set_page_config(
+    page_title="DemandPilot | Retail Demand Intelligence",
+    page_icon="📈",
+    layout="wide",
 )
 
-# Monthly sales
-monthly_sales = (
-    filtered_df.set_index("order_date")
-    .resample("M")["sales"]
-    .sum()
-    .reset_index()
+
+@st.cache_data
+def load_clean_data():
+    df = pd.read_csv(CLEAN_DATA_PATH)
+    df["order_date"] = pd.to_datetime(df["order_date"])
+    return df
+
+
+@st.cache_data
+def load_metrics():
+    return pd.read_csv(MODEL_METRICS_PATH)
+
+
+@st.cache_data
+def load_predictions():
+    df = pd.read_csv(PREDICTIONS_PATH)
+    df["date"] = pd.to_datetime(df["date"])
+    return df
+
+
+df = load_clean_data()
+metrics = load_metrics()
+preds = load_predictions()
+
+st.title("DemandPilot")
+st.subheader("Retail Demand Forecasting and Business Intelligence Dashboard")
+
+st.markdown(
+    """
+    DemandPilot is a client-ready retail analytics and forecasting system.
+    It helps business users monitor sales performance, compare forecasting models,
+    upload retail transaction data, and generate demand forecasts using a persisted
+    machine-learning model.
+    """
 )
 
-# =========================
-# KPI Section
-# =========================
-total_sales = filtered_df["sales"].sum()
-total_profit = filtered_df["profit"].sum() if "profit" in filtered_df.columns else 0
-total_orders = filtered_df["order_id"].nunique() if "order_id" in filtered_df.columns else len(filtered_df)
+with st.sidebar:
+    st.header("Business Filters")
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Sales", f"${total_sales:,.2f}")
-col2.metric("Total Profit", f"${total_profit:,.2f}")
-col3.metric("Total Orders", f"{total_orders:,}")
+    regions = sorted(df["region"].dropna().unique())
+    categories = sorted(df["product_category"].dropna().unique())
 
-st.divider()
+    selected_regions = st.multiselect("Region", regions, default=regions)
+    selected_categories = st.multiselect("Product Category", categories, default=categories)
 
-# =========================
-# Daily Sales Trend
-# =========================
-st.subheader("Daily Sales Trend")
+    date_min = df["order_date"].min()
+    date_max = df["order_date"].max()
 
-fig, ax = plt.subplots(figsize=(10, 4))
-ax.plot(filtered_daily_sales["order_date"], filtered_daily_sales["sales"])
-ax.set_xlabel("Order Date")
-ax.set_ylabel("Sales")
-ax.set_title("Filtered Daily Sales Over Time")
-plt.xticks(rotation=45)
-st.pyplot(fig)
+    date_range = st.date_input(
+        "Date Range",
+        value=(date_min, date_max),
+        min_value=date_min,
+        max_value=date_max,
+    )
 
-st.divider()
+filtered = df[
+    (df["region"].isin(selected_regions))
+    & (df["product_category"].isin(selected_categories))
+].copy()
 
-# =========================
-# Monthly Sales Trend
-# =========================
-st.subheader("Monthly Sales Trend")
+if len(date_range) == 2:
+    start_date, end_date = date_range
+    filtered = filtered[
+        (filtered["order_date"] >= pd.to_datetime(start_date))
+        & (filtered["order_date"] <= pd.to_datetime(end_date))
+    ]
 
-fig, ax = plt.subplots(figsize=(10, 4))
-ax.plot(monthly_sales["order_date"], monthly_sales["sales"])
-ax.set_xlabel("Month")
-ax.set_ylabel("Sales")
-ax.set_title("Monthly Sales")
-plt.xticks(rotation=45)
-st.pyplot(fig)
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    [
+        "Executive Overview",
+        "Demand Explorer",
+        "Forecasting Lab",
+        "Client Upload Forecast",
+        "Profit & Discount",
+        "Methodology",
+    ]
+)
 
-st.divider()
+with tab1:
+    st.markdown("### Executive Summary")
 
-# =========================
-# Profit by Region
-# =========================
-if "region" in filtered_df.columns and "profit" in filtered_df.columns:
-    st.subheader("Profit by Region")
-    region_profit = filtered_df.groupby("region")["profit"].sum().sort_values(ascending=False)
+    total_sales = filtered["sales"].sum()
+    total_profit = filtered["profit"].sum()
+    total_orders = filtered["order_id"].nunique()
+    avg_discount = filtered["discount"].mean()
 
-    fig, ax = plt.subplots(figsize=(8, 4))
-    region_profit.plot(kind="bar", ax=ax)
-    ax.set_ylabel("Profit")
-    ax.set_title("Total Profit by Region")
-    plt.xticks(rotation=45)
-    st.pyplot(fig)
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Sales", f"${total_sales:,.0f}")
+    col2.metric("Total Profit", f"${total_profit:,.0f}")
+    col3.metric("Orders", f"{total_orders:,}")
+    col4.metric("Avg Discount", f"{avg_discount:.1%}")
 
-st.divider()
-
-# =========================
-# Discount vs Profit
-# =========================
-if "discount" in filtered_df.columns and "profit" in filtered_df.columns:
-    st.subheader("Discount vs Profit")
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.scatter(filtered_df["discount"], filtered_df["profit"], alpha=0.5)
-    ax.set_xlabel("Discount")
-    ax.set_ylabel("Profit")
-    ax.set_title("Discount vs Profit")
-    st.pyplot(fig)
-
-st.divider()
-
-# =========================
-# Top Products Table
-# =========================
-if "product_name" in filtered_df.columns:
-    st.subheader("Top 10 Products by Sales")
-    top_products = (
-        filtered_df.groupby("product_name")["sales"]
+    daily_sales = (
+        filtered.groupby("order_date")["sales"]
         .sum()
-        .sort_values(ascending=False)
-        .head(10)
+        .reset_index()
+        .sort_values("order_date")
+    )
+
+    fig = px.line(
+        daily_sales,
+        x="order_date",
+        y="sales",
+        title="Daily Sales Trend",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    region_summary = (
+        filtered.groupby("region")
+        .agg(
+            Sales=("sales", "sum"),
+            Profit=("profit", "sum"),
+            Orders=("order_id", "nunique"),
+            Avg_Discount=("discount", "mean"),
+        )
+        .reset_index()
+        .sort_values("Sales", ascending=False)
+    )
+
+    st.markdown("### Regional Performance")
+    st.dataframe(region_summary, use_container_width=True)
+
+with tab2:
+    st.markdown("### Demand Explorer")
+
+    monthly = filtered.copy()
+    monthly["month"] = monthly["order_date"].dt.to_period("M").astype(str)
+
+    monthly_sales = (
+        monthly.groupby(["month", "product_category"])["sales"]
+        .sum()
         .reset_index()
     )
+
+    fig = px.line(
+        monthly_sales,
+        x="month",
+        y="sales",
+        color="product_category",
+        title="Monthly Sales by Product Category",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    category_region = (
+        filtered.groupby(["region", "product_category"])["sales"]
+        .sum()
+        .reset_index()
+    )
+
+    fig = px.bar(
+        category_region,
+        x="region",
+        y="sales",
+        color="product_category",
+        barmode="group",
+        title="Sales by Region and Product Category",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    top_products = (
+        filtered.groupby("product_name")
+        .agg(
+            Sales=("sales", "sum"),
+            Profit=("profit", "sum"),
+            Orders=("order_id", "nunique"),
+        )
+        .reset_index()
+        .sort_values("Sales", ascending=False)
+        .head(15)
+    )
+
+    st.markdown("### Top Products")
     st.dataframe(top_products, use_container_width=True)
 
-st.divider()
+with tab3:
+    st.markdown("### Forecasting Lab")
 
-# =========================
-# Regional Forecasting
-# =========================
-st.subheader("Regional Forecasting")
+    st.markdown(
+        """
+        This section compares forecasting models using time-aware evaluation.
+        Lower MAE, RMSE, SMAPE, and WAPE indicate better performance.
+        Bias close to zero means the model has less systematic over- or under-forecasting.
+        """
+    )
 
-forecast_region_df = pd.read_csv("data/processed/forecast_results_by_region.csv")
-forecast_region_df["order_date"] = pd.to_datetime(forecast_region_df["order_date"])
+    st.dataframe(metrics, use_container_width=True)
 
-metrics_region_df = pd.read_csv("data/processed/forecast_metrics_by_region.csv")
+    best_model = metrics.sort_values("SMAPE").iloc[0]["model"]
+    st.success(f"Best model by SMAPE: {best_model}")
 
-region_options = forecast_region_df["region"].unique()
-selected_region = st.selectbox("Select Region", region_options)
+    pred_models = sorted(preds["model"].unique())
+    selected_model = st.selectbox(
+        "Model",
+        pred_models,
+        index=pred_models.index(best_model) if best_model in pred_models else 0,
+    )
 
-region_data = forecast_region_df[forecast_region_df["region"] == selected_region]
-region_metrics = metrics_region_df[metrics_region_df["region"] == selected_region]
+    pred_regions = sorted(preds["Region"].dropna().unique())
+    pred_categories = sorted(preds["Category"].dropna().unique())
 
-col1, col2, col3 = st.columns(3)
-col1.metric("MAE", f"{region_metrics['MAE'].values[0]:.2f}")
-col2.metric("RMSE", f"{region_metrics['RMSE'].values[0]:.2f}")
-col3.metric("SMAPE", f"{region_metrics['SMAPE'].values[0]:.2f}%")
+    selected_pred_region = st.selectbox("Forecast Region", pred_regions)
+    selected_pred_category = st.selectbox("Forecast Category", pred_categories)
 
-fig, ax = plt.subplots(figsize=(10, 4))
-ax.plot(region_data["order_date"], region_data["total_sales"], label="Actual")
-ax.plot(region_data["order_date"], region_data["prediction"], label="Forecast")
-ax.set_title(f"{selected_region} Forecast")
-ax.set_xlabel("Date")
-ax.set_ylabel("Sales")
-ax.legend()
-plt.xticks(rotation=45)
-st.pyplot(fig)
+    segment_preds = preds[
+        (preds["model"] == selected_model)
+        & (preds["Region"] == selected_pred_region)
+        & (preds["Category"] == selected_pred_category)
+    ].copy()
 
-st.divider()
+    segment_preds = segment_preds.sort_values("date")
 
-# =========================
-# Category Forecasting
-# =========================
-st.subheader("Category Forecasting")
+    if segment_preds.empty:
+        st.warning("No forecast records found for this segment.")
+    else:
+        fig = px.line(
+            segment_preds,
+            x="date",
+            y=["total_sales", "prediction"],
+            title=f"Actual vs Forecast: {selected_pred_region} / {selected_pred_category}",
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-forecast_category_df = pd.read_csv("data/processed/forecast_results_by_category.csv")
-forecast_category_df["order_date"] = pd.to_datetime(forecast_category_df["order_date"])
+        segment_preds["absolute_error"] = (
+            segment_preds["total_sales"] - segment_preds["prediction"]
+        ).abs()
 
-metrics_category_df = pd.read_csv("data/processed/forecast_metrics_by_category.csv")
+        fig = px.line(
+            segment_preds,
+            x="date",
+            y="absolute_error",
+            title="Forecast Error Over Time",
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-category_options = forecast_category_df["product_category"].unique()
-selected_category = st.selectbox("Select Category", category_options)
+with tab4:
+    st.markdown("### Client Upload Forecast")
 
-category_data = forecast_category_df[forecast_category_df["product_category"] == selected_category]
-category_metrics = metrics_category_df[metrics_category_df["product_category"] == selected_category]
+    st.markdown(
+        """
+        Upload a retail transaction CSV using the same schema as the training data.
+        DemandPilot will validate the file, build forecasting features, load the saved
+        production model, and generate demand forecasts at the region-category level.
+        """
+    )
 
-col1, col2, col3 = st.columns(3)
-col1.metric("MAE", f"{category_metrics['MAE'].values[0]:.2f}")
-col2.metric("RMSE", f"{category_metrics['RMSE'].values[0]:.2f}")
-col3.metric("SMAPE", f"{category_metrics['SMAPE'].values[0]:.2f}%")
+    with st.expander("Required CSV columns"):
+        st.code(
+            """
+order_date
+region
+product_category
+sales
+profit
+discount
+order_id
+order_quantity
+product_name
+shipping_cost
+unit_price
+product_base_margin
+            """.strip()
+        )
 
-fig, ax = plt.subplots(figsize=(10, 4))
-ax.plot(category_data["order_date"], category_data["total_sales"], label="Actual")
-ax.plot(category_data["order_date"], category_data["prediction"], label="Forecast")
-ax.set_title(f"{selected_category} Forecast")
-ax.set_xlabel("Date")
-ax.set_ylabel("Sales")
-ax.legend()
-plt.xticks(rotation=45)
-st.pyplot(fig)
+    uploaded_file = st.file_uploader(
+        "Upload client retail CSV",
+        type=["csv"],
+        help="Upload a CSV file with historical retail transactions.",
+    )
+
+    if uploaded_file is not None:
+        try:
+            forecast_output = predict_from_uploaded_csv(uploaded_file)
+
+            st.success("Forecast generated successfully.")
+
+            total_actual = forecast_output["total_sales"].sum()
+            total_forecast = forecast_output["forecast_sales"].sum()
+            mean_forecast = forecast_output["forecast_sales"].mean()
+            num_segments = forecast_output[["Region", "Category"]].drop_duplicates().shape[0]
+
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Historical Sales in Upload", f"${total_actual:,.0f}")
+            col2.metric("Forecasted Sales", f"${total_forecast:,.0f}")
+            col3.metric("Avg Forecast / Row", f"${mean_forecast:,.0f}")
+            col4.metric("Forecast Segments", f"{num_segments:,}")
+
+            st.markdown("### Forecast Preview")
+            preview_cols = [
+                "date",
+                "Region",
+                "Category",
+                "total_sales",
+                "forecast_sales",
+            ]
+            st.dataframe(forecast_output[preview_cols].head(100), use_container_width=True)
+
+            daily_forecast = (
+                forecast_output.groupby("date")
+                .agg(
+                    actual_sales=("total_sales", "sum"),
+                    forecast_sales=("forecast_sales", "sum"),
+                )
+                .reset_index()
+                .sort_values("date")
+            )
+
+            fig = px.line(
+                daily_forecast,
+                x="date",
+                y=["actual_sales", "forecast_sales"],
+                title="Uploaded Data: Actual vs Forecasted Sales",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            segment_summary = (
+                forecast_output.groupby(["Region", "Category"])
+                .agg(
+                    Actual_Sales=("total_sales", "sum"),
+                    Forecast_Sales=("forecast_sales", "sum"),
+                    Avg_Forecast=("forecast_sales", "mean"),
+                )
+                .reset_index()
+                .sort_values("Forecast_Sales", ascending=False)
+            )
+
+            st.markdown("### Segment Forecast Summary")
+            st.dataframe(segment_summary, use_container_width=True)
+
+            csv = forecast_output.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="Download Forecast CSV",
+                data=csv,
+                file_name="demandpilot_forecast_output.csv",
+                mime="text/csv",
+            )
+
+        except Exception as exc:
+            st.error("Forecast generation failed.")
+            st.exception(exc)
+
+with tab5:
+    st.markdown("### Profit and Discount Analysis")
+
+    fig = px.scatter(
+        filtered,
+        x="discount",
+        y="profit",
+        color="product_category",
+        size="sales",
+        hover_data=["region", "product_name"],
+        title="Discount vs Profit",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    profit_by_category = (
+        filtered.groupby("product_category")
+        .agg(
+            Sales=("sales", "sum"),
+            Profit=("profit", "sum"),
+            Avg_Discount=("discount", "mean"),
+            Avg_Margin=("product_base_margin", "mean"),
+        )
+        .reset_index()
+    )
+
+    fig = px.bar(
+        profit_by_category,
+        x="product_category",
+        y="Profit",
+        title="Profit by Product Category",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.dataframe(profit_by_category, use_container_width=True)
+
+with tab6:
+    st.markdown("### Methodology")
+
+    st.markdown(
+        """
+        **Pipeline**
+
+        1. Clean raw retail transaction data.
+        2. Aggregate transactions into daily region-category demand.
+        3. Build time-series features using calendar variables, lagged sales,
+           rolling demand statistics, discount, profit, margin, shipping cost,
+           and order-volume signals.
+        4. Compare simple forecasting baselines against machine-learning models.
+        5. Save the best model as a backend inference artifact.
+        6. Support client CSV upload for forecast generation.
+        7. Visualize demand, profit, forecast error, and model comparison in an
+           interactive dashboard.
+
+        **Models**
+
+        - Naive lag-1 baseline
+        - Seasonal naive lag-7 baseline
+        - Rolling mean baseline
+        - Linear Regression
+        - Ridge Regression
+        - Random Forest
+        - Histogram-based Gradient Boosting
+
+        **Metrics**
+
+        - MAE: average absolute error
+        - RMSE: root mean squared error
+        - SMAPE: symmetric mean absolute percentage error
+        - WAPE: total absolute error relative to total demand
+        - Bias: systematic over- or under-forecasting
+
+        **Cloud Readiness**
+
+        - Dockerfile included for containerized deployment.
+        - AWS deployment plan included for App Runner, ECS/Fargate, or Elastic Beanstalk.
+        - Future production version can move uploaded files and model artifacts to S3.
+        """
+    )
