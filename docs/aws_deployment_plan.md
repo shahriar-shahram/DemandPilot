@@ -10,31 +10,27 @@ Use Docker with AWS App Runner or Elastic Beanstalk.
 
 ## Current Architecture
 
-```text
-User Browser
-    ↓
-Streamlit Dashboard
-    ↓
-Backend Inference Module
-    ↓
-best_demand_model.joblib
-    ↓
-Forecast Output
-```
+    User Browser
+        ↓
+    Streamlit Dashboard
+        ↓
+    Backend Inference Module
+        ↓
+    best_demand_model.joblib
+        ↓
+    Forecast Output
 
 ## Future AWS Architecture
 
-```text
-User Browser
-    ↓
-AWS App Runner / ECS Fargate
-    ↓
-Streamlit App Container
-    ↓
-Amazon S3 for uploaded client files and model artifacts
-    ↓
-CloudWatch logs and monitoring
-```
+    User Browser
+        ↓
+    AWS App Runner / ECS Fargate
+        ↓
+    Streamlit App Container
+        ↓
+    Amazon S3 for uploaded client files and model artifacts
+        ↓
+    CloudWatch logs and monitoring
 
 ## Why AWS
 
