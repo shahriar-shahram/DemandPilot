@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from sklearn.linear_model import LinearRegression
+from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 # =========================
@@ -87,7 +87,14 @@ for category in categories:
     # -------------------------
     # Model
     # -------------------------
-    model = LinearRegression()
+    model = XGBRegressor(
+        n_estimators=300,
+        learning_rate=0.05,
+        max_depth=5,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42
+    )
     model.fit(X_train, y_train)
 
     test["prediction"] = model.predict(X_test)
