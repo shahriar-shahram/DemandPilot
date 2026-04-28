@@ -2,6 +2,12 @@
 
 **Client-ready retail demand forecasting and business intelligence dashboard.**
 
+<p align="center">
+  <a href="https://demandpilot-shahriar.streamlit.app/">
+    <strong>Live Demo: DemandPilot on Streamlit Cloud</strong>
+  </a>
+</p>
+
 DemandPilot is an end-to-end retail analytics and forecasting product that transforms historical transaction data into demand forecasts, model evaluation reports, and executive-ready business insights. The system includes a reproducible forecasting pipeline, persisted machine-learning model, upload-based inference workflow, Streamlit dashboard, Docker support, and AWS deployment planning.
 
 <p align="center">
