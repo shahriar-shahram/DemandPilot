@@ -2,22 +2,21 @@
 
 ## Product Style
 
-DemandPilot uses a darker and more executive visual identity than Fresh Retail Copilot.
+DemandPilot uses a bright, executive SaaS visual identity with a cleaner feel than Fresh Retail Copilot.
 
 ## Palette
 
-- Midnight Navy: `#070B1A`
-- Panel Navy: `#11182F`
-- Electric Violet: `#8B5CF6`
-- Signal Cyan: `#22D3EE`
-- Forecast Amber: `#F6B443`
-- Success Mint: `#34D399`
+- Cloud Background: `#F8FAFC`
+- Soft Indigo Panel: `#EEF2FF`
+- Product Blue: `#2563EB`
+- Signal Cyan: `#0891B2`
+- Success Mint: `#059669`
+- Deep Text: `#0F172A`
 
 ## Design Direction
 
-- SaaS executive dashboard
-- Glassmorphism panels
-- Gradient hero section
-- Rounded analytical cards
-- Clear model/product story
-- Different visual identity from Fresh Retail Copilot
+- Bright SaaS dashboard
+- Clean glass panels
+- Blue/cyan gradient accents
+- Soft enterprise analytics feel
+- Clear product identity distinct from Fresh Retail Copilot
