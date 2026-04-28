@@ -10,6 +10,7 @@ sys.path.append(str(ROOT_DIR / "src"))
 
 from config import CLEAN_DATA_PATH, MODEL_METRICS_PATH, PREDICTIONS_PATH
 from inference import predict_from_uploaded_csv
+from styles import apply_brand_style, render_brand_header, section_card
 
 
 st.set_page_config(
@@ -42,16 +43,12 @@ df = load_clean_data()
 metrics = load_metrics()
 preds = load_predictions()
 
-st.title("DemandPilot")
-st.subheader("Retail Demand Forecasting and Business Intelligence Dashboard")
+apply_brand_style()
+render_brand_header()
 
-st.markdown(
-    """
-    DemandPilot is a client-ready retail analytics and forecasting system.
-    It helps business users monitor sales performance, compare forecasting models,
-    upload retail transaction data, and generate demand forecasts using a persisted
-    machine-learning model.
-    """
+section_card(
+    "Retail forecasting, redesigned as a client product",
+    "Monitor demand, compare forecasting models, upload client transaction data, and generate region-category forecasts through a persisted scikit-learn backend model."
 )
 
 with st.sidebar:
@@ -97,7 +94,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
 )
 
 with tab1:
-    st.markdown("### Executive Summary")
+    section_card("Executive Overview", "High-level commercial KPIs for sales, profit, orders, discounts, and regional performance.")
 
     total_sales = filtered["sales"].sum()
     total_profit = filtered["profit"].sum()
@@ -141,7 +138,7 @@ with tab1:
     st.dataframe(region_summary, use_container_width=True)
 
 with tab2:
-    st.markdown("### Demand Explorer")
+    section_card("Demand Explorer", "Explore monthly demand patterns, category mix, regional sales concentration, and top product performance.")
 
     monthly = filtered.copy()
     monthly["month"] = monthly["order_date"].dt.to_period("M").astype(str)
@@ -193,7 +190,7 @@ with tab2:
     st.dataframe(top_products, use_container_width=True)
 
 with tab3:
-    st.markdown("### Forecasting Lab")
+    section_card("Forecasting Lab", "Compare model performance, inspect actual-vs-forecast behavior, and analyze forecast errors over time.")
 
     st.markdown(
         """
@@ -253,7 +250,7 @@ with tab3:
         st.plotly_chart(fig, use_container_width=True)
 
 with tab4:
-    st.markdown("### Client Upload Forecast")
+    section_card("Client Upload Forecast", "Upload a client retail CSV and generate forecasts using the saved backend model artifact.")
 
     st.markdown(
         """
@@ -359,7 +356,7 @@ product_base_margin
             st.exception(exc)
 
 with tab5:
-    st.markdown("### Profit and Discount Analysis")
+    section_card("Profit & Discount Intelligence", "Analyze whether discounting, margin, and product category behavior support profitable demand generation.")
 
     fig = px.scatter(
         filtered,
@@ -394,7 +391,7 @@ with tab5:
     st.dataframe(profit_by_category, use_container_width=True)
 
 with tab6:
-    st.markdown("### Methodology")
+    section_card("Methodology", "A productized ML workflow: data cleaning, feature engineering, model comparison, persisted inference, Docker, and AWS deployment planning.")
 
     st.markdown(
         """
